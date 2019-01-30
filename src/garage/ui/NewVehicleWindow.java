@@ -1,6 +1,8 @@
 package garage.ui;
 
 import garage.Garage;
+import garage.simulation.control.MovementTarget;
+import garage.simulation.control.VehicleController;
 import garage.vehicles.Vehicle;
 import garage.vehicles.VehicleType;
 import garage.vehicles.civil.Car;
@@ -61,10 +63,12 @@ public class NewVehicleWindow {
 
     public static VehicleType typeFlag;
     public static boolean toEdit;
+    public static boolean adminApp;        //true for admin app, false for user app
 
-    public static void initialize(VehicleType type, boolean edit) {
+    public static void initialize(VehicleType type, boolean edit, boolean admin) {
         typeFlag = type;
         toEdit = edit;
+        adminApp = admin;
 
         formGrid();
         setupButtons();
@@ -74,7 +78,7 @@ public class NewVehicleWindow {
         else
             clearFields();
 
-        if(stage == null){
+        if (stage == null) {
             stage = new Stage();
             stage.initModality(Modality.APPLICATION_MODAL);
             stage.setTitle("Garage | Add new vehicle");
@@ -310,7 +314,12 @@ public class NewVehicleWindow {
                 load = Double.parseDouble(capacityInput.getText());
                 vehicle = new FirefightingVan(name, chassis, engine, registration, image, load);
         }
-        AdminAppHome.platformComboBox.getSelectionModel().getSelectedItem().findRandomPositionAndPark(vehicle);
+        if (adminApp) {
+            AdminAppHome.platformComboBox.getSelectionModel().getSelectedItem().findRandomPositionAndPark(vehicle);
+        } else {
+            Garage.getPlatforms().get(0).getSpotAt(0, 1).place(vehicle);
+            new VehicleController(vehicle, MovementTarget.PARKING_SPOT).start();
+        }
     }
 
     private static void chooseImage() {

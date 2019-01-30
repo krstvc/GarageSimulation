@@ -2,6 +2,7 @@ package garage.vehicles;
 
 import garage.Garage;
 import garage.GarageSpot;
+import garage.simulation.control.VehicleController;
 
 import java.io.Serializable;
 import java.util.concurrent.ThreadLocalRandom;
@@ -20,11 +21,12 @@ public abstract class Vehicle implements Serializable {
     private GarageSpot location;
     private boolean isParked;
 
+
     public Vehicle() {
         int id;
         do {
             id = ThreadLocalRandom.current().nextInt(1000);
-        } while (Garage.getVehicleHashMap().containsKey("RandGenChassis" + id));
+        } while (Garage.getVehicleHashMap().containsKey("RandGenRegistration" + id));
 
         name = "RandGenName" + id;
         chassisNumber = "RandGenChassis" + id;

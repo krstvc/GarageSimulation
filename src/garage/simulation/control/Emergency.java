@@ -19,11 +19,9 @@ import garage.vehicles.sanitary.SanitaryVan;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 
-public class Accident {
+public class Emergency {
 
     private static Vehicle actor1;
     private static Vehicle actor2;
@@ -40,18 +38,23 @@ public class Accident {
     public static boolean happening = false;
     public static boolean canHappen = true;
 
-    private static Lock locker = new ReentrantLock();
+    private static boolean crash;       //true if crash happened, false if detected wanted vehicle
+
+    private static final Object locker = new Object();
+
 
     public static void collide(Vehicle first, Vehicle second) {
-        System.out.println("KABOOOOOOOM");
-        canHappen = false;
-        happening = true;
-        actor1 = first;
-        actor2 = second;
-        platform = actor1.getLocation().getPlatform();
-        location = actor1.getLocation();
+        synchronized (locker) {
+            canHappen = false;
+            happening = true;
+            crash = true;
+            actor1 = first;
+            actor2 = second;
+            platform = actor1.getLocation().getPlatform();
+            location = actor1.getLocation();
+        }
         specialVehiclesAtCrashSiteCount = 0;
-        System.out.println(platform + " (" + location.getxCoordinate() + ", " + location.getyCoordinate() + ")");
+        System.out.println("Crash happened at the following location: " + platform + " (" + location.getxCoordinate() + ", " + location.getyCoordinate() + ")");
 
         actor1.setLabel("X");
         actor2.setLabel("X");
@@ -63,32 +66,99 @@ public class Accident {
         findPoliceVehicleToSendToCrashSite();
     }
 
-    public static void checkIn() {
-        if (++specialVehiclesAtCrashSiteCount == 3)
-            resolve();
-    }
+    public static void trackDownWantedVehicle(Vehicle policeVehicleOnDuty, Vehicle wantedVehicle) {
+        synchronized (locker) {
+            canHappen = false;
+            crash = false;
+            Emergency.policeVehicleOnDuty = policeVehicleOnDuty;
+            actor1 = wantedVehicle;
+            platform = actor1.getLocation().getPlatform();
+            location = actor1.getLocation();
+        }
+        System.out.println("Detected wanted vehicle " + wantedVehicle.getName() + " at the following location: " + platform + " (" + location.getxCoordinate() + ", " + location.getyCoordinate() + ")");
 
-    public static void resolve() {
-        System.out.println("RESOLVED");
-        happening = false;
-        for (VehicleController vehicle : VehicleController.movingVehicles) {
-            if (vehicle.getControlledVehicle() == sanitaryVehicleOnDuty
-                    || vehicle.getControlledVehicle() == firefightingVehicleOnDuty
-                    || vehicle.getControlledVehicle() == policeVehicleOnDuty) {
-                vehicle.setTarget(MovementTarget.EXIT);
-                vehicle.setRunning(true);
+        wantedVehicle.setLabel("W");
+
+        ((Police) policeVehicleOnDuty).turnOnRotation();
+        for (VehicleController movingVehicle : VehicleController.movingVehicles) {
+            if (movingVehicle.getControlledVehicle() == wantedVehicle) {
+                movingVehicle.setRunning(false);
+                break;
             }
         }
-        ((Sanitary) sanitaryVehicleOnDuty).turnOffRotation();
-        ((Firefighting) firefightingVehicleOnDuty).turnOffRotation();
-        ((Police) policeVehicleOnDuty).turnOffRotation();
+
+        Garage.getVehicleHashMap().remove(policeVehicleOnDuty.getRegistrationNumber());
+        Garage.getVehicleHashMap().remove(wantedVehicle.getRegistrationNumber());
+    }
+
+    public static void checkIn() {
+        if (crash) {
+            if (++specialVehiclesAtCrashSiteCount == 3)
+                resolveAccident();
+        } else {
+            sendWantedVehicleToExit();
+        }
+    }
+
+    private static void sendWantedVehicleToExit() {
         new Thread(() -> {
+            System.out.println("Handling wanted vehicle case, please wait...");
             try {
-                Thread.sleep(VehicleController.getSleepTimeInMillis() * 20);
-                canHappen = true;
+                Thread.sleep(ThreadLocalRandom.current().nextInt(2000) + 3000);
             } catch (InterruptedException interrupted) {
                 GarageLogger.log(Level.WARNING, "thread interrupted", interrupted);
             }
+            Police.writeWantedVehicleDetails(actor1, policeVehicleOnDuty);
+            System.out.println(policeVehicleOnDuty.getName() + " is about to escort " + actor1.getName() + " to exit");
+            synchronized (VehicleController.getJumpToNextSpotLocker()) {
+                int sent = 0;
+                for (VehicleController movingVehicle : VehicleController.movingVehicles) {
+                    if (movingVehicle.getControlledVehicle() == policeVehicleOnDuty || movingVehicle.getControlledVehicle() == actor1) {
+                        movingVehicle.setFinished(true);
+                        new VehicleController(movingVehicle.getControlledVehicle(), MovementTarget.EXIT).start();
+                        ++sent;
+                    }
+                    if (sent == 2)
+                        return;
+                }
+                new VehicleController(actor1, MovementTarget.EXIT).start();
+            }
+            canHappen = true;
+        }).start();
+    }
+
+    public static void resolveAccident() {
+        new Thread(() -> {
+            System.out.println("Handling crash, please wait...");
+            try {
+                Thread.sleep(ThreadLocalRandom.current().nextInt(7000) + 3000);
+            } catch (InterruptedException interrupted) {
+                GarageLogger.log(Level.WARNING, "thread interrupted", interrupted);
+            }
+            Police.writeCrashDetails(actor1, actor2, policeVehicleOnDuty, sanitaryVehicleOnDuty, firefightingVehicleOnDuty);
+            System.out.println("Crash has been taken care of, traffic on the platform may continue now");
+            synchronized (VehicleController.getJumpToNextSpotLocker()) {
+                happening = false;
+                for (VehicleController vehicle : VehicleController.movingVehicles) {
+                    if (vehicle.getControlledVehicle() == sanitaryVehicleOnDuty
+                            || vehicle.getControlledVehicle() == firefightingVehicleOnDuty
+                            || vehicle.getControlledVehicle() == policeVehicleOnDuty) {
+                        vehicle.setTarget(MovementTarget.EXIT);
+                        vehicle.setRunning(true);
+                    }
+                }
+                ((Sanitary) sanitaryVehicleOnDuty).turnOffRotation();
+                ((Firefighting) firefightingVehicleOnDuty).turnOffRotation();
+                ((Police) policeVehicleOnDuty).turnOffRotation();
+            }
+            new Thread(() -> {
+                try {
+                    Thread.sleep(VehicleController.getSleepTimeInMillis() * 40);
+                    canHappen = true;
+                } catch (InterruptedException interrupted) {
+                    GarageLogger.log(Level.WARNING, "thread interrupted", interrupted);
+                }
+            }).start();
         }).start();
     }
 
@@ -139,12 +209,11 @@ public class Accident {
                 ((Sanitary) sanitaryVehicleOnDuty).turnOnRotation();
                 for (VehicleController controller : VehicleController.movingVehicles) {
                     if (controller.getControlledVehicle() == sanitaryVehicleOnDuty) {
-                        System.out.println("                    SETOVANO");
-                        controller.setTarget(MovementTarget.PLACE_OF_ACCIDENT);
+                        controller.setTarget(MovementTarget.EMERGENCY_LOCATION);
                         return;
                     }
                 }
-                new VehicleController(sanitaryVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(sanitaryVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             } else {
                 int type = ThreadLocalRandom.current().nextInt(2);
                 switch (type) {
@@ -161,7 +230,7 @@ public class Accident {
                     platformIndex = ThreadLocalRandom.current().nextInt(Garage.getPlatforms().size());
                 } while (Garage.getPlatforms().get(platformIndex).isFull());
                 Garage.getPlatforms().get(platformIndex).findRandomPositionAndPark(sanitaryVehicleOnDuty);
-                new VehicleController(sanitaryVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(sanitaryVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             }
         }
     }
@@ -185,12 +254,11 @@ public class Accident {
                 ((Firefighting) firefightingVehicleOnDuty).turnOnRotation();
                 for (VehicleController controller : VehicleController.movingVehicles) {
                     if (controller.getControlledVehicle() == firefightingVehicleOnDuty) {
-                        System.out.println("                    SETOVANO");
-                        controller.setTarget(MovementTarget.PLACE_OF_ACCIDENT);
+                        controller.setTarget(MovementTarget.EMERGENCY_LOCATION);
                         return;
                     }
                 }
-                new VehicleController(firefightingVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(firefightingVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             } else {
                 firefightingVehicleOnDuty = new FirefightingVan();
                 ((Firefighting) firefightingVehicleOnDuty).turnOnRotation();
@@ -199,7 +267,7 @@ public class Accident {
                     platformIndex = ThreadLocalRandom.current().nextInt(Garage.getPlatforms().size());
                 } while (Garage.getPlatforms().get(platformIndex).isFull());
                 Garage.getPlatforms().get(platformIndex).findRandomPositionAndPark(firefightingVehicleOnDuty);
-                new VehicleController(firefightingVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(firefightingVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             }
         }
     }
@@ -223,12 +291,11 @@ public class Accident {
                 ((Police) policeVehicleOnDuty).turnOnRotation();
                 for (VehicleController controller : VehicleController.movingVehicles) {
                     if (controller.getControlledVehicle() == policeVehicleOnDuty) {
-                        System.out.println("                    SETOVANO");
-                        controller.setTarget(MovementTarget.PLACE_OF_ACCIDENT);
+                        controller.setTarget(MovementTarget.EMERGENCY_LOCATION);
                         return;
                     }
                 }
-                new VehicleController(policeVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(policeVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             } else {
                 int type = ThreadLocalRandom.current().nextInt(3);
                 switch (type) {
@@ -248,7 +315,7 @@ public class Accident {
                     platformIndex = ThreadLocalRandom.current().nextInt(Garage.getPlatforms().size());
                 } while (Garage.getPlatforms().get(platformIndex).isFull());
                 Garage.getPlatforms().get(platformIndex).findRandomPositionAndPark(policeVehicleOnDuty);
-                new VehicleController(policeVehicleOnDuty, MovementTarget.PLACE_OF_ACCIDENT).start();
+                new VehicleController(policeVehicleOnDuty, MovementTarget.EMERGENCY_LOCATION).start();
             }
         }
     }

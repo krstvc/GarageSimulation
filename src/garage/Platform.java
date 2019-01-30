@@ -1,10 +1,14 @@
 package garage;
 
 import garage.vehicles.Vehicle;
+import garage.vehicles.firefighting.Firefighting;
+import garage.vehicles.police.Police;
+import garage.vehicles.sanitary.Sanitary;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -53,7 +57,9 @@ public class Platform implements Serializable {
         GarageSpot location = freeParkingSpots.get(random.nextInt(freeParkingSpots.size()));
         location.place(vehicle);
         freeParkingSpots.remove(location);
-        Garage.getVehicleHashMap().put(vehicle.getChassisNumber(), vehicle);
+        Garage.getVehicleHashMap().put(vehicle.getRegistrationNumber(), vehicle);
+        if (!(vehicle instanceof Police) && !(vehicle instanceof Sanitary) && !(vehicle instanceof Firefighting))
+            Garage.getPaymentEvidenceHashMap().put(vehicle.getRegistrationNumber(), LocalDateTime.now());
         observableListOfVehicles.add(vehicle);
     }
 
@@ -61,7 +67,9 @@ public class Platform implements Serializable {
         GarageSpot location = getSpotAt(vehicle.getLocation().getxCoordinate(), vehicle.getLocation().getyCoordinate());
         location.leave();
         freeParkingSpots.add(location);
-        Garage.getVehicleHashMap().remove(vehicle.getChassisNumber());
+        Garage.getVehicleHashMap().remove(vehicle.getRegistrationNumber());
+        if (!(vehicle instanceof Police) && !(vehicle instanceof Sanitary) && !(vehicle instanceof Firefighting))
+            Garage.chargeOnExit(vehicle);
         observableListOfVehicles.remove(vehicle);
     }
 

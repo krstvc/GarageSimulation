@@ -4,7 +4,13 @@ import garage.Garage;
 import garage.GarageSpot;
 import garage.utility.logging.GarageLogger;
 import garage.vehicles.Vehicle;
+import garage.vehicles.firefighting.Firefighting;
+import garage.vehicles.police.Police;
+import garage.vehicles.sanitary.Sanitary;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -43,6 +49,9 @@ public class VehicleController extends Thread {
             }
             synchronized (jumpToNextSpotLocker) {
                 if (running) {
+                    if (controlledVehicle instanceof Police && Emergency.canHappen) {
+                        checkForWantedVehicles();
+                    }
                     GarageSpot current = controlledVehicle.getLocation();
                     if (current != null) {
                         next = null;
@@ -76,7 +85,9 @@ public class VehicleController extends Thread {
                                     finished = true;
                                     next = null;
                                     current.leave();
-                                    Garage.getVehicleHashMap().remove(controlledVehicle.getChassisNumber());
+                                    Garage.getVehicleHashMap().remove(controlledVehicle.getRegistrationNumber());
+                                    if (!(controlledVehicle instanceof Police) && !(controlledVehicle instanceof Sanitary) && !(controlledVehicle instanceof Firefighting))
+                                        Garage.chargeOnExit(controlledVehicle);
                                     movingVehicles.remove(this);
                                 } else {
                                     if (current.getToPreviousPlatform() != null && current.getToPreviousPlatform().isFree() && !thereAreVehiclesOnTheRight(current, -1)) {
@@ -87,21 +98,21 @@ public class VehicleController extends Thread {
                                 }
 
                                 break;
-                            case PLACE_OF_ACCIDENT:
+                            case EMERGENCY_LOCATION:
                                 if (overtaking) {
-                                    if (current.getPlatform().getPlatformIndex() < Accident.platform.getPlatformIndex())
+                                    if (current.getPlatform().getPlatformIndex() < Emergency.platform.getPlatformIndex())
                                         endOvertakingOrCarryOnIfSpotTaken(current, 1);
-                                    else if (current.getPlatform().getPlatformIndex() > Accident.platform.getPlatformIndex())
+                                    else if (current.getPlatform().getPlatformIndex() > Emergency.platform.getPlatformIndex())
                                         endOvertakingOrCarryOnIfSpotTaken(current, -1);
                                     else {
                                         endOvertakingOrCarryOnIfSpotTaken(current, 0);
-                                        if (PathCalculator.distance(current, Accident.location) < 4) {
-                                            Accident.checkIn();
+                                        if (PathCalculator.distance(current, Emergency.location) < 4) {
+                                            Emergency.checkIn();
                                             running = false;
                                         }
                                     }
                                 } else {
-                                    if (current.getPlatform().getPlatformIndex() < Accident.platform.getPlatformIndex()) {
+                                    if (current.getPlatform().getPlatformIndex() < Emergency.platform.getPlatformIndex()) {
                                         if (current.getToNextPlatform() != null && current.getToNextPlatform().isFree()) {
                                             next = current.getToNextPlatform();
                                             waitCount = 0;
@@ -118,12 +129,11 @@ public class VehicleController extends Thread {
                                             } else
                                                 next = null;
                                         }
-                                    } else if (current.getPlatform().getPlatformIndex() > Accident.platform.getPlatformIndex()) {
+                                    } else if (current.getPlatform().getPlatformIndex() > Emergency.platform.getPlatformIndex()) {
                                         if (current.getToPreviousPlatform() != null && current.getToPreviousPlatform().isFree()) {
                                             next = current.getToPreviousPlatform();
                                             waitCount = 0;
                                         } else if (++waitCount > 5) {
-                                            System.out.println(controlledVehicle.getType() + " " + waitCount);
                                             next = PathCalculator.getSpotToBeginOvertaking(current, -1);
                                             if (next != null && next.isFree()) {
                                                 waitCount = 0;
@@ -137,8 +147,8 @@ public class VehicleController extends Thread {
                                                 next = null;
                                         }
                                     } else {
-                                        if (PathCalculator.distance(current, Accident.location) < 4) {
-                                            Accident.checkIn();
+                                        if (PathCalculator.distance(current, Emergency.location) < 4) {
+                                            Emergency.checkIn();
                                             running = false;
                                         } else {
                                             if (current.isParkingSpot() && current.getToPreviousPlatform() != null)
@@ -182,14 +192,31 @@ public class VehicleController extends Thread {
         movingVehicles.remove(this);
     }
 
+    private void checkForWantedVehicles() {
+        try {
+            List<String> wantedVehiclesRegistrationNumbers = Files.readAllLines(Police.WANTED_VEHICLES_FILE.toPath());
+            for (String registrationNumber : wantedVehiclesRegistrationNumbers) {
+                if (Garage.getVehicleHashMap().containsKey(registrationNumber)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Police)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Sanitary)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Firefighting)) {
+                    Emergency.trackDownWantedVehicle(controlledVehicle, Garage.getVehicleHashMap().get(registrationNumber));
+                    target = MovementTarget.EMERGENCY_LOCATION;
+                }
+            }
+        } catch (IOException exception) {
+            GarageLogger.log(Level.WARNING, "i/o exception occurred", exception);
+        }
+    }
+
     private boolean thereAreVehiclesOnTheRight(GarageSpot current, int direction) {
         return PathCalculator.getSpotToWaitFor(current, direction) != null && !PathCalculator.getSpotToWaitFor(current, direction).isFree();
     }
 
     private void potentiallyCauseAnAccident(Vehicle actor1, Vehicle actor2) {
         double probability = ThreadLocalRandom.current().nextDouble();
-        if (actor2 != null && Accident.canHappen && probability < 0.1) {
-            Accident.collide(actor1, actor2);
+        if (actor2 != null && Emergency.canHappen && probability < 0.1) {
+            Emergency.collide(actor1, actor2);
             setRunning(false);
             for (VehicleController movingVehicle : movingVehicles) {
                 if (movingVehicle.getControlledVehicle() == actor2) {
@@ -213,6 +240,14 @@ public class VehicleController extends Thread {
                 if (++waitCount > 10) {
                     current.place(spotToContinueOvertaking.getVehicle());
                     spotToContinueOvertaking.place(controlledVehicle);
+                    if (Emergency.involved(current.getVehicle())) {
+                        for (VehicleController movingVehicle : VehicleController.movingVehicles) {
+                            if (movingVehicle.getControlledVehicle() == current.getVehicle()) {
+                                movingVehicle.overtaking = false;
+                                return;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -237,6 +272,10 @@ public class VehicleController extends Thread {
 
     public static void setSleepTimeInMillis(long sleepTimeInMillis) {
         VehicleController.sleepTimeInMillis = sleepTimeInMillis;
+    }
+
+    public void setFinished(boolean finished) {
+        this.finished = finished;
     }
 
     public void setRunning(boolean running) {

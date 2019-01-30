@@ -121,15 +121,15 @@ public class AdminAppHome {
 
         menuBar.getMenus().add(addVehicleMenu);
 
-        civilCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_CAR, false));
-        civilMotorcycleItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_MOTORCYCLE, false));
-        civilVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_VAN, false));
-        policeCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_CAR, false));
-        policeMotorcycleItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_MOTORCYCLE, false));
-        policeVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_VAN, false));
-        sanitaryCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.SANITARY_CAR, false));
-        sanitaryVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.SANITARY_VAN, false));
-        firefightingVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.FIREFIGHTING_VAN, false));
+        civilCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_CAR, false, true));
+        civilMotorcycleItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_MOTORCYCLE, false, true));
+        civilVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.CIVIL_VAN, false, true));
+        policeCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_CAR, false, true));
+        policeMotorcycleItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_MOTORCYCLE, false, true));
+        policeVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.POLICE_VAN, false, true));
+        sanitaryCarItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.SANITARY_CAR, false, true));
+        sanitaryVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.SANITARY_VAN, false, true));
+        firefightingVanItem.setOnAction(event -> NewVehicleWindow.initialize(VehicleType.FIREFIGHTING_VAN, false, true));
     }
 
     private static void setupTopButtons() {
@@ -143,7 +143,7 @@ public class AdminAppHome {
         HBox.setHgrow(switchToUserAppButton, Priority.NEVER);
 
         editVehicleButton.setOnAction(event -> NewVehicleWindow.initialize(
-                vehicleTable.getSelectionModel().getSelectedItem().getType(), true
+                vehicleTable.getSelectionModel().getSelectedItem().getType(), true, true
         ));
 
         deleteVehicleButton.setOnAction(event -> {

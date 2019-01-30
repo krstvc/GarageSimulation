@@ -110,20 +110,6 @@ public class UserAppHome {
 
             stage.setTitle("Garage | User app");
             stage.setScene(scene);
-            stage.setOnCloseRequest(event -> {
-                if (VehicleController.movingVehicles.size() == 0 || VehicleController.movingVehicles.size() == 1) {
-                    if (VehicleController.movingVehicles.size() == 1)
-                        VehicleController.movingVehicles.get(0).setFinished(true);
-                    stage.hide();
-                } else {
-                    event.consume();
-                    PopUp.displayWarningInfo(
-                            "Warning",
-                            "Simulation is running",
-                            "Please wait for the simulation to end before closing the app."
-                    );
-                }
-            });
         }
 
         stage.show();

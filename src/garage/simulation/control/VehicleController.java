@@ -41,14 +41,14 @@ public class VehicleController extends Thread {
     @Override
     public void run() {
         movingVehicles.add(this);
-        while (!finished) {     //thread is alive until the vehicle reaches its destination
+        while (!finished) {
             try {
                 sleep(sleepTimeInMillis);
             } catch (InterruptedException interrupted) {
                 GarageLogger.log(Level.WARNING, "thread " + getName() + " interrupted", interrupted);
             }
-            synchronized (jumpToNextSpotLocker) {       //only one vehicle at a time is allowed to choose a spot to jump to
-                if (running) {      //busy waiting
+            synchronized (jumpToNextSpotLocker) {
+                if (running) {
                     if (controlledVehicle instanceof Police && Emergency.canHappen) {
                         checkForWantedVehicles();
                     }
@@ -99,14 +99,14 @@ public class VehicleController extends Thread {
 
                                 break;
                             case EMERGENCY_LOCATION:
-                                if (overtaking) {       //if the vehicle is overtaking, first check if it is possible to return to right lane
+                                if (overtaking) {
                                     if (current.getPlatform().getPlatformIndex() < Emergency.platform.getPlatformIndex())
-                                        endOvertakingOrCarryOnIfSpotTaken(current, 1);      //1 indicates movement towards next platform
+                                        endOvertakingOrCarryOnIfSpotTaken(current, 1);
                                     else if (current.getPlatform().getPlatformIndex() > Emergency.platform.getPlatformIndex())
-                                        endOvertakingOrCarryOnIfSpotTaken(current, -1);     //-1 indicates movement towards previous platform
+                                        endOvertakingOrCarryOnIfSpotTaken(current, -1);
                                     else {
-                                        endOvertakingOrCarryOnIfSpotTaken(current, 0);      //0 indicates movement around current platform
-                                        if (PathCalculator.distance(current, Emergency.location) < 4) {     //4 spots distance is considered 'close enough'
+                                        endOvertakingOrCarryOnIfSpotTaken(current, 0);
+                                        if (PathCalculator.distance(current, Emergency.location) < 4) {
                                             Emergency.checkIn();
                                             running = false;
                                         }
@@ -116,12 +116,12 @@ public class VehicleController extends Thread {
                                         if (current.getToNextPlatform() != null && current.getToNextPlatform().isFree()) {
                                             next = current.getToNextPlatform();
                                             waitCount = 0;
-                                        } else if (++waitCount > 5) {       //if locked in place for 5 cycles, it should start overtaking
+                                        } else if (++waitCount > 5) {
                                             next = PathCalculator.getSpotToBeginOvertaking(current, 1);
                                             if (next != null && next.isFree()) {
                                                 waitCount = 0;
                                                 overtaking = true;
-                                            } else if (next != null && ++waitCount > 10) {      //if it is not possible to overtake, switch places with the vehicle in the way
+                                            } else if (next != null && ++waitCount > 10) {
                                                 current.place(next.getVehicle());
                                                 next.place(controlledVehicle);
                                                 overtaking = true;
@@ -133,12 +133,12 @@ public class VehicleController extends Thread {
                                         if (current.getToPreviousPlatform() != null && current.getToPreviousPlatform().isFree()) {
                                             next = current.getToPreviousPlatform();
                                             waitCount = 0;
-                                        } else if (++waitCount > 5) {       //if locked in place for 5 cycles, it should start overtaking
+                                        } else if (++waitCount > 5) {
                                             next = PathCalculator.getSpotToBeginOvertaking(current, -1);
                                             if (next != null && next.isFree()) {
                                                 waitCount = 0;
                                                 overtaking = true;
-                                            } else if (next != null && ++waitCount > 10) {      //if it is not possible to overtake, switch places with the vehicle in the way
+                                            } else if (next != null && ++waitCount > 10) {
                                                 current.place(next.getVehicle());
                                                 next.place(controlledVehicle);
                                                 overtaking = true;
@@ -147,7 +147,7 @@ public class VehicleController extends Thread {
                                                 next = null;
                                         }
                                     } else {
-                                        if (PathCalculator.distance(current, Emergency.location) < 4) {     //4 spots distance is considered 'close enough'
+                                        if (PathCalculator.distance(current, Emergency.location) < 4) {
                                             Emergency.checkIn();
                                             running = false;
                                         } else {
@@ -155,12 +155,12 @@ public class VehicleController extends Thread {
                                                 next = current.getToPreviousPlatform();
                                             else if (current.getToTraverseCurrentPlatform() != null && current.getToTraverseCurrentPlatform().isFree())
                                                 next = current.getToTraverseCurrentPlatform();
-                                            else {          //no need to wait for overtaking because there is no movement on the platform
+                                            else {
                                                 next = PathCalculator.getSpotToBeginOvertaking(current, 0);
                                                 if (next != null && next.isFree()) {
                                                     waitCount = 0;
                                                     overtaking = true;
-                                                } else if (next != null && ++waitCount > 5) {       //switch places with vehicle in the way
+                                                } else if (next != null && ++waitCount > 5) {
                                                     current.place(next.getVehicle());
                                                     next.place(controlledVehicle);
                                                     overtaking = true;
@@ -173,7 +173,7 @@ public class VehicleController extends Thread {
                                 }
                         }
 
-                        if (next != null) {     //if found a spot, jump to it, wait for another cycle otherwise
+                        if (next != null) {
                             current.leave();
                             if (current.isParkingSpot())
                                 current.getPlatform().getFreeParkingSpots().add(current);
@@ -190,6 +190,23 @@ public class VehicleController extends Thread {
         }
 
         movingVehicles.remove(this);
+    }
+
+    private void checkForWantedVehicles() {
+        try {
+            List<String> wantedVehiclesRegistrationNumbers = Files.readAllLines(Police.WANTED_VEHICLES_FILE.toPath());
+            for (String registrationNumber : wantedVehiclesRegistrationNumbers) {
+                if (Garage.getVehicleHashMap().containsKey(registrationNumber)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Police)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Sanitary)
+                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Firefighting)) {
+                    Emergency.trackDownWantedVehicle(controlledVehicle, Garage.getVehicleHashMap().get(registrationNumber));
+                    target = MovementTarget.EMERGENCY_LOCATION;
+                }
+            }
+        } catch (IOException exception) {
+            GarageLogger.log(Level.WARNING, "i/o exception occurred", exception);
+        }
     }
 
     private boolean thereAreVehiclesOnTheRight(GarageSpot current, int direction) {
@@ -233,23 +250,6 @@ public class VehicleController extends Thread {
                     }
                 }
             }
-        }
-    }
-
-    private void checkForWantedVehicles() {
-        try {
-            List<String> wantedVehiclesRegistrationNumbers = Files.readAllLines(Police.WANTED_VEHICLES_FILE.toPath());
-            for (String registrationNumber : wantedVehiclesRegistrationNumbers) {
-                if (Garage.getVehicleHashMap().containsKey(registrationNumber)
-                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Police)
-                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Sanitary)
-                        && !(Garage.getVehicleHashMap().get(registrationNumber) instanceof Firefighting)) {
-                    Emergency.trackDownWantedVehicle(controlledVehicle, Garage.getVehicleHashMap().get(registrationNumber));
-                    target = MovementTarget.EMERGENCY_LOCATION;
-                }
-            }
-        } catch (IOException exception) {
-            GarageLogger.log(Level.WARNING, "i/o exception occurred", exception);
         }
     }
 

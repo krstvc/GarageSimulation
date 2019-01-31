@@ -260,12 +260,14 @@ public class NewVehicleWindow {
             case SANITARY_CAR:
                 Car currentCar = (Car) currentVehicle;
                 currentCar.setNumberOfDoors(Integer.parseInt(doorsInput.getText()));
+                break;
             case CIVIL_VAN:
             case POLICE_VAN:
             case SANITARY_VAN:
             case FIREFIGHTING_VAN:
                 Van currentVan = (Van) currentVehicle;
                 currentVan.setLoadCapacity(Double.parseDouble(capacityInput.getText()));
+                break;
         }
         AdminAppHome.vehicleTable.refresh();
     }
